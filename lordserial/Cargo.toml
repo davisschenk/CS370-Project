@@ -11,7 +11,7 @@ anyhow = "1.0.0"
 packet = {path = "pkg/packet"}
 parser = {path = "pkg/parser"}
 data = {path = "pkg/data"}
-error = {path = "pkg/error}
+error = {path = "pkg/error"}
 serialport="4.0.0"
 
 
