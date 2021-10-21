@@ -1,0 +1,3 @@
+[submodule "lordserial"]
+	path = lordserial
+	url = https://github.com/davisschenk/lordserial
