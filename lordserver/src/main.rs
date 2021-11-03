@@ -1,7 +1,7 @@
 use clap::{App, Arg};
 use futures_channel::mpsc::{unbounded, UnboundedSender};
 use futures_util::StreamExt;
-use lordserial::{data::DataPacket, parser::LordParser};
+use lordserial::{data::Packet, parser::LordParser};
 use std::{
     collections::HashMap,
     fs::File,
@@ -38,12 +38,7 @@ fn broadcast_messages(peers: Peers, port: String) {
     let port = serialport::new(port, 115200).open().unwrap();
     let mut parser = LordParser::new(port, move |packet| {
         for (_peer_addr, peer_rx) in peers.lock().unwrap().iter() {
-            let json = match DataPacket::new(&packet) {
-                DataPacket::IMU(d) => serde_json::to_string(&d).unwrap(),
-                DataPacket::GNSS(d) => serde_json::to_string(&d).unwrap(),
-                _ => break, // Dont send unimplemented packets
-            };
-
+            let json = serde_json::to_string(&Packet::new(&packet)).unwrap();
             let _ = peer_rx.unbounded_send(Message::text(json));
         }
     });
@@ -113,7 +108,7 @@ async fn main() {
                 .long("record")
                 .about("record to a file")
                 .takes_value(true)
-                .conflicts_with("simulate")
+                .conflicts_with("simulate"),
         )
         .get_matches();
 
@@ -127,9 +122,8 @@ async fn main() {
         let file = file.to_string();
         tokio::task::spawn_blocking(move || simulator(peers, file));
     }
-    
     // Read and parse messages from lord and send to all peers
-    if let Some(port) = matches.value_of("port") {
+    else if let Some(port) = matches.value_of("port") {
         let s = state.clone();
         let port = port.to_string();
         tokio::task::spawn_blocking(move || broadcast_messages(s, port));
