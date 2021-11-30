@@ -53,12 +53,12 @@ fn recorder(peers: Peers, file_path: String) {
     let mut file = File::create(file_path).expect("File already exists");
 
     loop {
-        match rx.try_next() {
-            Ok(r) => match r {
-                Some(t) => writeln!(file, "{}", t).unwrap(),
-                None => break,
-            },
-            Err(_) => (),
+        if let Ok(r) = rx.try_next() {
+            if let Some(t) = r {
+                writeln!(file, "{}", t).unwrap()
+            } else {
+                break;
+            }
         };
     }
 
@@ -69,13 +69,11 @@ fn simulator(peers: Peers, path: String) {
     let file = File::open(path).unwrap();
 
     loop {
-        for line in io::BufReader::new(&file).lines() {
-            if let Ok(line) = line {
-                for (_peer_addr, peer_rx) in peers.lock().unwrap().iter() {
-                    let _ = peer_rx.unbounded_send(Message::text(&line));
-                }
-                std::thread::sleep(std::time::Duration::from_millis(200));
+        for line in io::BufReader::new(&file).lines().flatten() {
+            for (_peer_addr, peer_rx) in peers.lock().unwrap().iter() {
+                let _ = peer_rx.unbounded_send(Message::text(&line));
             }
+            std::thread::sleep(std::time::Duration::from_millis(200));
         }
     }
 }
@@ -112,26 +110,26 @@ async fn main() {
         )
         .get_matches();
 
-    let state = Peers::new(Mutex::new(HashMap::new()));
+    let state: Peers = Peers::new(Mutex::new(HashMap::new()));
     let try_socket = TcpListener::bind(matches.value_of("address").unwrap()).await;
     let listener = try_socket.expect("Failed to bind");
 
     // Read from a file and send to all peers
     if let Some(file) = matches.value_of("simulate") {
-        let peers = state.clone();
+        let peers: Peers = state.clone();
         let file = file.to_string();
         tokio::task::spawn_blocking(move || simulator(peers, file));
     }
     // Read and parse messages from lord and send to all peers
     else if let Some(port) = matches.value_of("port") {
-        let s = state.clone();
+        let peers: Peers = state.clone();
         let port = port.to_string();
-        tokio::task::spawn_blocking(move || broadcast_messages(s, port));
+        tokio::task::spawn_blocking(move || broadcast_messages(peers, port));
     }
 
     // Spawn a "peer" that puts all messages received into a file
     if let Some(file) = matches.value_of("record") {
-        let peers = state.clone();
+        let peers: Peers = state.clone();
         let file = file.to_string();
         tokio::task::spawn_blocking(move || recorder(peers, file));
     }
